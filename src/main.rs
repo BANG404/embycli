@@ -239,18 +239,15 @@ async fn play(
 
     let config = load_config()?;
     let item = if looks_like_emby_id(&target) {
-        get_item(&config, &target).await?
-    } else {
-        let limit = select.max(10) as u32;
-        let items = search_items(&config, &target, limit).await?;
-        if items.is_empty() {
-            bail!("no search results for {target:?}");
+        match get_item(&config, &target).await {
+            Ok(item) => item,
+            Err(error) if is_not_found(&error) => {
+                select_search_item(&config, &target, select).await?
+            }
+            Err(error) => return Err(error),
         }
-        print_items(&items);
-        items
-            .into_iter()
-            .nth(select - 1)
-            .ok_or_else(|| anyhow!("--select {select} is outside the result list"))?
+    } else {
+        select_search_item(&config, &target, select).await?
     };
 
     let stream_url = stream_url(&config, &item.id);
@@ -267,6 +264,19 @@ async fn play(
         .with_context(|| format!("failed to launch player {player:?}"))?;
 
     Ok(())
+}
+
+async fn select_search_item(config: &Config, query: &str, select: usize) -> Result<Item> {
+    let limit = select.max(10) as u32;
+    let items = search_items(config, query, limit).await?;
+    if items.is_empty() {
+        bail!("no search results for {query:?}");
+    }
+    print_items(&items);
+    items
+        .into_iter()
+        .nth(select - 1)
+        .ok_or_else(|| anyhow!("--select {select} is outside the result list"))
 }
 
 async fn search_items(config: &Config, query: &str, limit: u32) -> Result<Vec<Item>> {
@@ -314,6 +324,13 @@ async fn get_item(config: &Config, id: &str) -> Result<Item> {
         .json::<Item>()
         .await
         .context("failed to parse item response")
+}
+
+fn is_not_found(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .filter_map(|cause| cause.downcast_ref::<reqwest::Error>())
+        .any(|error| error.status() == Some(StatusCode::NOT_FOUND))
 }
 
 fn print_items(items: &[Item]) {
@@ -380,7 +397,30 @@ fn api_url(server: &str, path: &str) -> String {
 }
 
 fn looks_like_emby_id(target: &str) -> bool {
-    target.len() >= 24 && target.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+    !target.is_empty() && target.chars().all(|c| c.is_ascii_digit())
+        || target.len() >= 24 && target.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::looks_like_emby_id;
+
+    #[test]
+    fn numeric_item_ids_are_direct_ids() {
+        assert!(looks_like_emby_id("45644"));
+    }
+
+    #[test]
+    fn long_hex_item_ids_are_direct_ids() {
+        assert!(looks_like_emby_id("0123456789abcdef01234567"));
+    }
+
+    #[test]
+    fn search_text_is_not_a_direct_id() {
+        assert!(!looks_like_emby_id(""));
+        assert!(!looks_like_emby_id("matrix"));
+        assert!(!looks_like_emby_id("matrix 1999"));
+    }
 }
 
 fn default_player() -> String {
