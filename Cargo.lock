@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "anstream"
-version = "1.1.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "824a212faf96e9acacdbd09febd34438f8f711fb84e09a8916013cd7815ca28d"
 dependencies = [
@@ -199,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "embycli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
