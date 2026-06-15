@@ -2,6 +2,8 @@
 name = "embycli"
 version = "0.1.0"
 edition = "2024"
+description = "A command-line Emby client for searching and playing media."
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 anyhow = "1.0.98"
